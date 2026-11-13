@@ -1,74 +1,54 @@
-name: build server arm64
-
-# Compila el servidor nativo (tarball fluxer-*-linux-arm64.tar.zst) con el mismo
-# Dockerfile del proyecto, descarga las librerías del sistema que normalmente
-# se instalan con apt (para poder correr sin root) y publica todo en un Release.
-#
-# Uso: pestaña Actions -> "build server arm64" -> Run workflow.
+name: Compilar servidor Veylo amd64
 
 on:
   workflow_dispatch:
+    inputs:
+      domain:
+        description: Dominio público, sin https ni rutas
+        default: veylo.sbs
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
-      - name: checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: apply Veylo patch (si veylo-patch.mjs está en la raiz del repo)
+      - name: Aplicar parche de Veylo si está en el repo
         if: hashFiles('veylo-patch.mjs') != ''
-        run: |
-          node veylo-patch.mjs \
-            --domain bot1.hidenplay.net \
-            --name Veylo \
-            --releases "https://github.com/${{ github.repository }}/releases"
+        env:
+          DOMAIN: ${{ inputs.domain }}
+        run: node veylo-patch.mjs --domain "$DOMAIN" --name Veylo --releases "https://github.com/$GITHUB_REPOSITORY/releases"
 
-      - name: set up buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: compute version
+      - name: Compilar para Debian x86_64
         run: |
           hms="$(date -u +%H%M%S)"
-          echo "VERSION=$(date -u +%Y).$(date -u +%-m%d).$((10#$hms))" >> "$GITHUB_ENV"
-
-      - name: build server tarball
-        run: |
-          docker buildx build \
-            --target export \
+          version="$(date -u +%Y).$(date -u +%-m%d).$((10#$hms))"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          docker buildx build --platform linux/amd64 --target export \
             -f packaging/monolith/Dockerfile \
             --build-arg PROFILE=release-fast \
-            --build-arg BUILD_VERSION="$VERSION" \
-            --output type=local,dest=out \
-            .
-          ls -lh out
+            --build-arg CARGO_BUILD_JOBS=2 \
+            --build-arg BUILD_VERSION="$version" \
+            --output type=local,dest=out .
+          test -s "out/fluxer-$version-linux-amd64.tar.zst"
+          (cd out && sha256sum -c SHA256SUMS)
+          cp packaging/install.sh out/install.sh
 
-      - name: collect runtime libraries (no root needed later)
-        run: |
-          mkdir -p debs vendor
-          docker run --rm \
-            -v "$PWD/packaging/runtime-packages:/rp:ro" \
-            -v "$PWD/debs:/out" \
-            debian:trixie-slim bash -euxc '
-              apt-get update
-              pkgs="$(grep -v "^#" /rp | tr "\n" " ")"
-              apt-get install -y --no-install-recommends --download-only \
-                -o Dir::Cache::archives=/out $pkgs
-            '
-          for deb in debs/*.deb; do dpkg-deb -x "$deb" vendor/; done
-          tar -C vendor -czf out/vendor-linux-arm64.tar.gz .
-          ls -lh out
-
-      - name: publish release
+      - name: Publicar paquete e instalador
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "server-arm64-$VERSION" \
-            out/*.tar.zst out/SHA256SUMS out/vendor-linux-arm64.tar.gz \
+          gh release create "server-amd64-$VERSION" \
+            "out/fluxer-$VERSION-linux-amd64.tar.zst" out/SHA256SUMS out/install.sh \
             --repo "$GITHUB_REPOSITORY" \
-            --title "server arm64 $VERSION" \
-            --notes "Servidor nativo para linux arm64 y librerias de runtime extraidas."
+            --target "$GITHUB_SHA" \
+            --latest=false \
+            --title "Veylo servidor amd64 $VERSION"
