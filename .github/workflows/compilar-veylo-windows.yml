@@ -92,8 +92,18 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Compilar el cliente de escritorio
+        shell: pwsh
         working-directory: fluxer_desktop
-        run: pnpm run build
+        run: |
+          $toolBin = Join-Path $env:VCToolsInstallDir 'bin\Hostx64\x64'
+          $linker = Join-Path $toolBin 'link.exe'
+          if (-not (Test-Path -LiteralPath $linker -PathType Leaf)) {
+            throw "No se encontró el enlazador de Visual Studio en $linker"
+          }
+          $env:Path = "$toolBin;$env:Path"
+          $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER = $linker
+          Write-Host "Enlazador MSVC: $linker"
+          pnpm run build
 
       - name: Generar instalador Windows x64
         working-directory: fluxer_desktop
