@@ -6,7 +6,7 @@ on:
       domain:
         description: Dominio de tu instancia (sin https://)
         required: true
-        default: bot1.hidenplay.net
+        default: veylo.sbs
 
 permissions:
   contents: read
@@ -69,7 +69,7 @@ jobs:
                   if source.count(old) != 1:
                       raise SystemExit(f"No se encontró un ajuste único en {path}: {old}")
                   source = source.replace(old, new, 1)
-              file.write_text(source, encoding="utf-8")
+              file.write_bytes(source.encode("utf-8"))
 
           replace("fluxer_desktop/src/main/DesktopRuntimeDiscovery.ts", [
               ("return getLaunchInstanceEndpointOverride();",
@@ -107,7 +107,7 @@ jobs:
                   if source.count(old) != 1:
                       raise SystemExit(f"No se encontró un ajuste único en {path}: {old}")
                   source = source.replace(old, new, 1)
-              file.write_text(source, encoding="utf-8")
+              file.write_bytes(source.encode("utf-8"))
 
           patch("user/components/modals/tabs/my_profile_tab/AvatarUploader.tsx", [
               ("assetType={AssetType.AVATAR}", "assetType={AssetType.AVATAR}\n\t\t\t\t\t\tallowFullAvatar={!animated}"),
@@ -154,7 +154,7 @@ jobs:
               ("\t\t\t\t!hasEdits &&", "\t\t\t\t!fullAvatar &&\n\t\t\t\t!hasEdits &&"),
               ("\t\t\t\t\tinspected.animated && isAnimatedCropSourceFormat(inspected.format)",
                "\t\t\t\t\tfullAvatar\n\t\t\t\t\t\t? await exportFullAvatar(img, maxWidth, maxHeight, sizeLimitBytes)\n\t\t\t\t\t\t: inspected.animated && isAnimatedCropSourceFormat(inspected.format)"),
-              ("onClick={handleSave}", """onClick={() => void handleSave()}"""),
+              ("onClick={handleSave}", "onClick={() => void handleSave()}"),
               ("\t\t\t\t\t{onSkip && isSkipAllowed && (", """          {allowFullAvatar && (
                       <Button
                         variant="secondary"
@@ -170,6 +170,26 @@ jobs:
 
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
+
+      - name: Normalizar los CSS que valida codegen
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          root = Path("fluxer_app/src/features/app/components")
+          for relative in (
+              "skeleton/GuildRailSkeleton.module.css",
+              "layout/GuildsLayout.module.css",
+          ):
+              file = root / relative
+              original = file.read_bytes()
+              normalized = original.replace(b"\r\n", b"\n")
+              if normalized != original:
+                  file.write_bytes(normalized)
+                  print(f"{relative}: CRLF convertido a LF")
+              else:
+                  print(f"{relative}: sin saltos CRLF")
+          PY
 
       - name: Compilar el cliente de escritorio
         shell: pwsh
