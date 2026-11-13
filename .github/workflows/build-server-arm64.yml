@@ -20,6 +20,14 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
+      - name: apply Veylo patch (si veylo-patch.mjs está en la raiz del repo)
+        if: hashFiles('veylo-patch.mjs') != ''
+        run: |
+          node veylo-patch.mjs \
+            --domain bot1.hidenplay.net \
+            --name Veylo \
+            --releases "https://github.com/${{ github.repository }}/releases"
+
       - name: set up buildx
         uses: docker/setup-buildx-action@v3
 
