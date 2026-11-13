@@ -28,7 +28,12 @@ jobs:
         shell: bash
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Descargar código con saltos LF
+        uses: actions/checkout@v4
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: "false"
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -85,6 +90,81 @@ jobs:
               ("target: winTargets,", """target: [{target: 'nsis', arch: ['x64']}],
               signAndEditExecutable: false,"""),
               ("\n\tlinux: {\n\t\ticon:", "\n\tnsis: {artifactName: 'Veylo-Setup.exe'},\n\tlinux: {\n\t\ticon:"),
+          ])
+          PY
+
+      - name: Ajustar el editor de avatar de Veylo
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          root = Path("fluxer_app/src/features")
+
+          def patch(path, edits):
+              file = root / path
+              source = file.read_text(encoding="utf-8")
+              for old, new in edits:
+                  if source.count(old) != 1:
+                      raise SystemExit(f"No se encontró un ajuste único en {path}: {old}")
+                  source = source.replace(old, new, 1)
+              file.write_text(source, encoding="utf-8")
+
+          patch("user/components/modals/tabs/my_profile_tab/AvatarUploader.tsx", [
+              ("assetType={AssetType.AVATAR}", "assetType={AssetType.AVATAR}\n\t\t\t\t\t\tallowFullAvatar={!animated}"),
+          ])
+          patch("expressions/components/modals/AssetCropModal.tsx", [
+              ("[AssetType.AVATAR]: {\n\t\taspectRatio: 1,\n\t\tcropShape: 'round',",
+               "[AssetType.AVATAR]: {\n\t\taspectRatio: 1,\n\t\tcropShape: 'rect',"),
+              ("\tonSkip?: () => void;", "\tonSkip?: () => void;\n\tallowFullAvatar?: boolean;"),
+              ("({imageUrl, assetType, onCropComplete, onSkip})",
+               "({imageUrl, assetType, onCropComplete, onSkip, allowFullAvatar})"),
+              ("onSkip={onSkip}", "onSkip={allowFullAvatar ? undefined : onSkip}\n\t\t\t\tallowFullAvatar={allowFullAvatar}"),
+          ])
+          patch("messaging/components/modals/ImageCropModal.tsx", [
+              ("\tonSkip?: () => void;", "\tonSkip?: () => void;\n\tallowFullAvatar?: boolean;"),
+              ("\t\tonSkip,\n\t\ttitle,", "\t\tonSkip,\n\t\tallowFullAvatar = false,\n\t\ttitle,"),
+              ("async function exportStaticImage(", """async function exportFullAvatar(
+            image: HTMLImageElement,
+            maxWidth: number,
+            maxHeight: number,
+            maxBytes: number,
+          ): Promise<Blob> {
+            const side = Math.min(512, maxWidth, maxHeight);
+            const canvas = document.createElement('canvas');
+            canvas.width = side;
+            canvas.height = side;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('Failed to get canvas context');
+            const scale = (side - 4) / Math.hypot(image.naturalWidth, image.naturalHeight);
+            const width = image.naturalWidth * scale;
+            const height = image.naturalHeight * scale;
+            ctx.drawImage(image, (side - width) / 2, (side - height) / 2, width, height);
+            const blob = await new Promise<Blob>((resolve, reject) => {
+              canvas.toBlob((result) => {
+                if (result) resolve(result);
+                else reject(new Error('Canvas toBlob failed'));
+              }, 'image/png');
+            });
+            if (blob.size > maxBytes) throw new CropSizeLimitError(blob.size, maxBytes);
+            return blob;
+          }
+
+          async function exportStaticImage("""),
+              ("const handleSave = useCallback(async () => {", "const handleSave = useCallback(async (fullAvatar = false) => {"),
+              ("\t\t\t\t!hasEdits &&", "\t\t\t\t!fullAvatar &&\n\t\t\t\t!hasEdits &&"),
+              ("\t\t\t\t\tinspected.animated && isAnimatedCropSourceFormat(inspected.format)",
+               "\t\t\t\t\tfullAvatar\n\t\t\t\t\t\t? await exportFullAvatar(img, maxWidth, maxHeight, sizeLimitBytes)\n\t\t\t\t\t\t: inspected.animated && isAnimatedCropSourceFormat(inspected.format)"),
+              ("onClick={handleSave}", """onClick={() => void handleSave()}"""),
+              ("\t\t\t\t\t{onSkip && isSkipAllowed && (", """          {allowFullAvatar && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => void handleSave(true)}
+                        disabled={exportDisabled || !displayDimensions}
+                      >
+                        {i18n.locale.startsWith('es') ? 'Usar foto completa' : 'Use full photo'}
+                      </Button>
+                    )}
+                    {onSkip && isSkipAllowed && ("""),
           ])
           PY
 
