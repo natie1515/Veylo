@@ -191,6 +191,22 @@ jobs:
                   print(f"{relative}: sin saltos CRLF")
           PY
 
+      - name: Adaptar el comando del renderer a Windows
+        run: |
+          python - <<'PYTHON'
+          import json
+          from pathlib import Path
+
+          file = Path("fluxer_app/package.json")
+          package = json.loads(file.read_text(encoding="utf-8"))
+          scripts = package["scripts"]
+          expected = "FLUXER_DESKTOP_RENDERER=true rspack build --mode production"
+          if scripts.get("build:renderer") != expected:
+              raise SystemExit("El comando build:renderer cambió. Revisa fluxer_app/package.json.")
+          scripts["build:renderer"] = 'set "FLUXER_DESKTOP_RENDERER=true" && rspack build --mode production'
+          file.write_bytes((json.dumps(package, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+          PYTHON
+
       - name: Compilar el cliente de escritorio
         shell: pwsh
         working-directory: fluxer_desktop
