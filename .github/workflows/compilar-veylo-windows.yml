@@ -1,0 +1,130 @@
+name: Compilar Veylo para Windows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Crear proyecto de escritorio
+        run: |
+          New-Item -ItemType Directory veylo-desktop | Out-Null
+          Set-Location veylo-desktop
+
+          @'
+          {
+            "name": "veylo-desktop",
+            "version": "1.0.0",
+            "private": true,
+            "description": "Veylo para Windows",
+            "author": "Veylo",
+            "main": "main.cjs",
+            "scripts": {
+              "build": "electron-builder --win nsis --x64 --publish never"
+            },
+            "build": {
+              "appId": "net.hidenplay.bot1.veylo",
+              "productName": "Veylo",
+              "files": ["main.cjs"],
+              "artifactName": "Veylo-Setup.exe"
+            }
+          }
+          '@ | Set-Content package.json -Encoding utf8
+
+          @'
+          const { app, BrowserWindow, dialog, shell } = require('electron');
+
+          const veyloUrl = new URL('https://bot1.hidenplay.net/');
+          let mainWindow;
+
+          function isVeylo(url) {
+            return new URL(url).origin === veyloUrl.origin;
+          }
+
+          function openExternal(url) {
+            const { protocol } = new URL(url);
+            if (protocol === 'https:' || protocol === 'http:') {
+              void shell.openExternal(url).catch(console.error);
+            }
+          }
+
+          app.whenReady().then(async () => {
+            mainWindow = new BrowserWindow({
+              title: 'Veylo',
+              width: 1200,
+              height: 800,
+              backgroundColor: '#101014',
+              autoHideMenuBar: true,
+              webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: true,
+              },
+            });
+
+            mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+              if (isVeylo(url)) {
+                void mainWindow.loadURL(url).catch(console.error);
+              } else {
+                openExternal(url);
+              }
+              return { action: 'deny' };
+            });
+
+            mainWindow.webContents.on('will-navigate', (event, url) => {
+              if (!isVeylo(url)) {
+                event.preventDefault();
+                openExternal(url);
+              }
+            });
+
+            mainWindow.webContents.on('will-redirect', (event, url) => {
+              if (!isVeylo(url)) {
+                event.preventDefault();
+                openExternal(url);
+              }
+            });
+
+            try {
+              await mainWindow.loadURL(veyloUrl.href);
+            } catch {
+              dialog.showErrorBox('Veylo', 'No se pudo abrir ' + veyloUrl.origin);
+            }
+          });
+
+          app.on('window-all-closed', () => app.quit());
+          '@ | Set-Content main.cjs -Encoding utf8
+
+          node --check main.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Compilar instalador de Windows x64
+        working-directory: veylo-desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm install --save-dev --save-exact electron@latest electron-builder@26.18.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Subir instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: Veylo-Windows-x64
+          path: veylo-desktop/dist/Veylo-Setup.exe
+          if-no-files-found: error
