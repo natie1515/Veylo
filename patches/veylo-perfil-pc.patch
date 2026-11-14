@@ -1,0 +1,413 @@
+diff --git a/fluxer_app/src/features/user/components/modals/UserProfileMobileSheet.tsx b/fluxer_app/src/features/user/components/modals/UserProfileMobileSheet.tsx
+index 2912446..67c4c3f 100644
+--- a/fluxer_app/src/features/user/components/modals/UserProfileMobileSheet.tsx
++++ b/fluxer_app/src/features/user/components/modals/UserProfileMobileSheet.tsx
+@@ -1,5 +1,7 @@
+ // SPDX-License-Identifier: AGPL-3.0-or-later
+ 
++import {profileNameStyle, profileThemeStyle} from '@app/features/user/components/profile/ProfileAppearance';
++
+ import {UserSettingsModal} from '@app/features/app/components/dialogs/LoadableSettingsModals';
+ import {
+ 	CustomStatusDisplay,
+@@ -470,6 +472,7 @@ const UserProfileMobileSheetContent: React.FC<UserProfileMobileSheetContentProps
+ 				>
+ 					<div
+ 						className={styles.container}
++						style={profileThemeStyle(effectiveProfile?.profile_appearance?.theme)}
+ 						data-flx="user.user-profile-mobile-sheet.user-profile-mobile-sheet-content.container"
+ 					>
+ 						{isLoading ? (
+@@ -579,6 +582,7 @@ const UserProfileMobileSheetContent: React.FC<UserProfileMobileSheetContentProps
+ 												>
+ 													<span
+ 														className={styles.username}
++														style={profileNameStyle(effectiveProfile?.profile_appearance?.name_style)}
+ 														data-flx="user.user-profile-mobile-sheet.user-profile-mobile-sheet-content.username"
+ 													>
+ 														{displayName}
+diff --git a/fluxer_app/src/features/user/components/modals/UserProfileModal.tsx b/fluxer_app/src/features/user/components/modals/UserProfileModal.tsx
+index cc8ca60..cad30aa 100644
+--- a/fluxer_app/src/features/user/components/modals/UserProfileModal.tsx
++++ b/fluxer_app/src/features/user/components/modals/UserProfileModal.tsx
+@@ -1,5 +1,7 @@
+ // SPDX-License-Identifier: AGPL-3.0-or-later
+ 
++import {profileThemeStyle} from '@app/features/user/components/profile/ProfileAppearance';
++
+ import {UserSettingsModal} from '@app/features/app/components/dialogs/LoadableSettingsModals';
+ import * as Modal from '@app/features/app/components/dialogs/Modal';
+ import RuntimeConfig from '@app/features/app/state/RuntimeConfig';
+@@ -774,7 +776,7 @@ export const UserProfileModal: UserProfileModalComponent = observer(
+ 				/>
+ 				<div
+ 					className={userProfileModalStyles.modalContainer}
+-					style={{borderColor}}
++					style={{borderColor, ...profileThemeStyle(borderProfile?.profile_appearance?.theme)}}
+ 					data-flx="user.user-profile-modal.div"
+ 				>
+ 					{showProfileSkeleton ? (
+diff --git a/fluxer_app/src/features/user/components/modals/tabs/MyProfileTab.tsx b/fluxer_app/src/features/user/components/modals/tabs/MyProfileTab.tsx
+index e14e4d6..61293b5 100644
+--- a/fluxer_app/src/features/user/components/modals/tabs/MyProfileTab.tsx
++++ b/fluxer_app/src/features/user/components/modals/tabs/MyProfileTab.tsx
+@@ -1,5 +1,8 @@
+ // SPDX-License-Identifier: AGPL-3.0-or-later
+ 
++import type {ProfileAppearance} from '@fluxer/schema/src/domains/user/ProfileAppearanceSchema';
++import {ProfileAppearanceEditor} from '@app/features/user/components/profile/ProfileAppearance';
++
+ import {EmailVerificationAlert} from '@app/features/app/components/dialogs/components/EmailVerificationAlert';
+ import {UnclaimedAccountAlert} from '@app/features/app/components/dialogs/components/UnclaimedAccountAlert';
+ import {SettingsSection} from '@app/features/app/components/dialogs/shared/SettingsSection';
+@@ -191,6 +194,7 @@ interface FormInputs {
+ 	global_name: string | null;
+ 	pronouns: string | null;
+ 	accent_color: number | null;
++	profile_appearance?: ProfileAppearance | null;
+ 	timezone: string | null;
+ 	timezone_privacy_flags: number;
+ 	nick?: string | null;
+@@ -362,6 +366,7 @@ const MyProfileTabComponent = observer(function MyProfileTabComponent({
+ 				...commonValues,
+ 				bio: markdownBio,
+ 				global_name: user.globalName || null,
++				profile_appearance: user.profileAppearance ?? null,
+ 				pronouns: user.pronouns || null,
+ 				accent_color: typeof user.accentColor === 'number' ? user.accentColor : null,
+ 				nick: null,
+@@ -544,6 +549,7 @@ const MyProfileTabComponent = observer(function MyProfileTabComponent({
+ 				};
+ 				assignProfileAssetUploadPatch(updateData, 'avatar', avatarAsset);
+ 				assignProfileAssetUploadPatch(updateData, 'banner', bannerAsset);
++				if (form.formState.dirtyFields.profile_appearance) updateData.profile_appearance = data.profile_appearance;
+ 				updateData.timezone = data.timezone;
+ 				updateData.timezone_privacy_flags = data.timezone_privacy_flags;
+ 				if (
+@@ -579,6 +585,7 @@ const MyProfileTabComponent = observer(function MyProfileTabComponent({
+ 					{
+ 						bio: savedBio,
+ 						global_name: newUser.global_name || null,
++						profile_appearance: newUser.profile_appearance ?? null,
+ 						pronouns: newUser.pronouns || null,
+ 						accent_color: typeof newUser.accent_color === 'number' ? newUser.accent_color : null,
+ 						timezone: newUser.timezone ?? null,
+@@ -869,6 +876,14 @@ const MyProfileTabComponent = observer(function MyProfileTabComponent({
+ 												error={form.formState.errors.global_name?.message}
+ 												disabled={isProfileCustomizationLocked}
+ 											/>
++<ProfileAppearanceEditor
++												section="name_style"
++												value={form.watch('profile_appearance')}
++												onChange={(value) => form.setValue('profile_appearance', value, {shouldDirty: true})}
++												displayName={form.watch('global_name') || user.username}
++												premium={user.isPremium()}
++												disabled={isProfileCustomizationLocked}
++											/>
+ 										</div>
+ 									)}
+ 									<div data-flx="user.my-profile-tab.my-profile-tab-component.div--3">
+@@ -969,6 +984,14 @@ const MyProfileTabComponent = observer(function MyProfileTabComponent({
+ 											onEmojiPickerOpenChange={setBioExpressionPickerOpen}
+ 											data-flx="user.my-profile-tab.my-profile-tab-component.bio-editor.bio-change"
+ 										/>
++										{!isPerGuildProfile && <ProfileAppearanceEditor
++												section="theme"
++												value={form.watch('profile_appearance')}
++												onChange={(value) => form.setValue('profile_appearance', value, {shouldDirty: true})}
++												displayName={form.watch('global_name') || user.username}
++												premium={user.isPremium()}
++												disabled={isProfileCustomizationLocked}
++											/>}
+ 									</div>
+ 								</div>
+ 								<div
+diff --git a/fluxer_app/src/features/user/components/modals/user_profile_modal/UserProfileModalUserInfo.tsx b/fluxer_app/src/features/user/components/modals/user_profile_modal/UserProfileModalUserInfo.tsx
+index 8d5e14b..86c09cf 100644
+--- a/fluxer_app/src/features/user/components/modals/user_profile_modal/UserProfileModalUserInfo.tsx
++++ b/fluxer_app/src/features/user/components/modals/user_profile_modal/UserProfileModalUserInfo.tsx
+@@ -1,5 +1,7 @@
+ // SPDX-License-Identifier: AGPL-3.0-or-later
+ 
++import {profileNameStyle} from '@app/features/user/components/profile/ProfileAppearance';
++
+ import {CustomStatusDisplay} from '@app/features/app/components/shared/custom_status_display/CustomStatusDisplay';
+ import {UserTag} from '@app/features/channel/components/ChannelUserTag';
+ import * as ModalCommands from '@app/features/ui/commands/ModalCommands';
+@@ -54,7 +56,7 @@ export const UserInfo: React.FC<UserInfoProps> = observer(({user, profile, guild
+ 						</div>
+ 					)}
+ 					<div className={userProfileModalStyles.nameRow} data-flx="user.user-profile-modal.user-info.div--5">
+-						<span className={userProfileModalStyles.userName} data-flx="user.user-profile-modal.user-info.span">
++						<span style={profileNameStyle(effectiveProfile?.profile_appearance?.name_style)} className={userProfileModalStyles.userName} data-flx="user.user-profile-modal.user-info.span">
+ 							{displayName}
+ 						</span>
+ 						{user.bot && (
+diff --git a/fluxer_app/src/features/user/components/profile/ProfileAppearance.tsx b/fluxer_app/src/features/user/components/profile/ProfileAppearance.tsx
+new file mode 100644
+index 0000000..fe051f8
+--- /dev/null
++++ b/fluxer_app/src/features/user/components/profile/ProfileAppearance.tsx
+@@ -0,0 +1,131 @@
++// SPDX-License-Identifier: AGPL-3.0-or-later
++
++import type {ProfileAppearance} from '@fluxer/schema/src/domains/user/ProfileAppearanceSchema';
++import type {CSSProperties} from 'react';
++import {Trans} from '@lingui/react/macro';
++
++const fonts = {
++	default: 'inherit',
++	modern: 'system-ui, sans-serif',
++	serif: 'Georgia, serif',
++	mono: 'monospace',
++} as const;
++
++const hex = (color: number) => `#${color.toString(16).padStart(6, '0')}`;
++
++export function profileThemeStyle(theme: ProfileAppearance['theme'] | undefined): CSSProperties | undefined {
++	if (!theme) return undefined;
++	return {backgroundImage: `linear-gradient(160deg, ${hex(theme.primary)}55, ${hex(theme.accent)}77)`};
++}
++
++export function profileNameStyle(style: ProfileAppearance['name_style'] | undefined): CSSProperties | undefined {
++	if (!style) return undefined;
++	const colors = style.colors.map(hex);
++	const color = colors[0];
++	const fontFamily = fonts[style.font];
++	switch (style.effect) {
++		case 'gradient':
++		case 'prism':
++		case 'candy':
++			return {
++				fontFamily,
++				color,
++				...(colors.length > 1 && {
++					backgroundImage: `linear-gradient(90deg, ${colors.join(', ')})`,
++					backgroundClip: 'text',
++					WebkitTextFillColor: 'transparent',
++				}),
++			};
++		case 'neon':
++			return {fontFamily, color, textShadow: `0 0 6px ${color}, 0 0 12px ${color}`};
++		case 'pop':
++			return {fontFamily, color, textShadow: '2px 2px currentColor'};
++		case 'cartoon':
++			return {fontFamily, color, fontWeight: 900, WebkitTextStroke: '1px var(--background-primary)'};
++		default:
++			return {fontFamily, color};
++	}
++}
++
++const defaultTheme = {primary: 0x387daa, accent: 0xb548c4};
++const defaultName: NonNullable<ProfileAppearance['name_style']> = {
++	font: 'modern',
++	effect: 'prism',
++	colors: [0x7ee7d8, 0x7ccbff, 0x7f8cff, 0xb56dff, 0xf38bd9],
++};
++
++const fontLabels = {default: 'Predeterminada', modern: 'Moderna', serif: 'Clásica', mono: 'Monoespaciada'};
++const effectLabels = {
++	solid: 'Liso', gradient: 'Degradado', neon: 'Neón', cartoon: 'Dibujo animado', pop: 'Pop', candy: 'Gominola', prism: 'Prisma',
++};
++
++interface Props {
++	value: ProfileAppearance | null | undefined;
++	onChange: (value: ProfileAppearance | null) => void;
++	displayName: string;
++	premium: boolean;
++	disabled: boolean;
++	section: 'theme' | 'name_style';
++}
++
++export function ProfileAppearanceEditor({value, onChange, displayName, premium, disabled, section}: Props) {
++	const appearance = value ?? {theme: null, name_style: null};
++	const theme = appearance.theme ?? defaultTheme;
++	const name = appearance.name_style ?? defaultName;
++	const preview = (
++		<div style={{padding: '1rem', borderRadius: '0.75rem', backgroundColor: 'var(--background-primary)', ...profileThemeStyle(appearance.theme)}}>
++			<strong style={profileNameStyle(appearance.name_style)}>{displayName}</strong>
++		</div>
++	);
++	return (
++		<fieldset disabled={disabled || !premium} style={{display: 'grid', gap: '0.75rem', minWidth: 0}}>
++			<legend>{section === 'theme' ? <Trans>Tema del perfil</Trans> : <Trans>Estilo del nombre de visualización</Trans>}</legend>
++			{!premium ? <span><Trans>Premium</Trans></span> : section === 'theme' ? (
++				<>
++					{preview}
++					<div style={{display: 'flex', gap: '1rem'}}>
++						{(['primary', 'accent'] as const).map((key) => (
++							<label key={key}>
++								{key === 'primary' ? <Trans>Primario</Trans> : <Trans>Realce</Trans>}
++								<input type="color" value={hex(theme[key])} onChange={(event) => {
++									onChange({...appearance, theme: {...theme, [key]: Number.parseInt(event.target.value.slice(1), 16)}});
++								}} />
++							</label>
++						))}
++					</div>
++					{appearance.theme && <button type="button" onClick={() => onChange({...appearance, theme: null})}><Trans>Restablecer tema</Trans></button>}
++				</>
++			) : (
++				<>
++					{preview}
++					<label><Trans>Fuente</Trans>{' '}
++						<select value={name.font} onChange={(event) => onChange({...appearance, name_style: {...name, font: event.target.value as typeof name.font}})}>
++							{Object.entries(fontLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
++						</select>
++					</label>
++					<label><Trans>Efecto</Trans>{' '}
++						<select value={name.effect} onChange={(event) => onChange({...appearance, name_style: {...name, effect: event.target.value as typeof name.effect}})}>
++							{Object.entries(effectLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
++						</select>
++					</label>
++					<div style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem'}}>
++						{(name.effect === 'prism' ? defaultName.colors : name.effect === 'gradient' || name.effect === 'candy' ? defaultName.colors.slice(0, 2) : defaultName.colors.slice(0, 1)).map((fallback, index, palette) => (
++							<label key={fallback}><Trans>Color</Trans> {index + 1}
++								<input type="color" value={hex(name.colors[index] ?? fallback)} onChange={(event) => {
++									const colors = palette.map((color, position) => name.colors[position] ?? color);
++									colors[index] = Number.parseInt(event.target.value.slice(1), 16);
++									onChange({...appearance, name_style: {...name, colors}});
++								}} />
++							</label>
++						))}
++					</div>
++					<button type="button" onClick={() => onChange({...appearance, name_style: {
++						...defaultName,
++						colors: defaultName.colors.map(() => Math.floor(Math.random() * 0x1000000)),
++					}})}><Trans>Sorpréndeme</Trans></button>
++					{appearance.name_style && <button type="button" onClick={() => onChange({...appearance, name_style: null})}><Trans>Eliminar estilo</Trans></button>}
++				</>
++			)}
++		</fieldset>
++	);
++}
+diff --git a/fluxer_app/src/features/user/models/User.ts b/fluxer_app/src/features/user/models/User.ts
+index 40d4415..870a7fa 100644
+--- a/fluxer_app/src/features/user/models/User.ts
++++ b/fluxer_app/src/features/user/models/User.ts
+@@ -1,5 +1,7 @@
+ // SPDX-License-Identifier: AGPL-3.0-or-later
+ 
++import type {ProfileAppearance} from '@fluxer/schema/src/domains/user/ProfileAppearanceSchema';
++
+ import RuntimeConfig from '@app/features/app/state/RuntimeConfig';
+ import {LimitResolver} from '@app/features/app/utils/LimitResolverAdapter';
+ import DeveloperOptions from '@app/features/devtools/state/DeveloperOptions';
+@@ -153,6 +155,7 @@ export class User {
+ 	readonly banner: string | null | undefined;
+ 	readonly bannerColor: number | null | undefined;
+ 	readonly pronouns: string | null | undefined;
++	readonly profileAppearance: ProfileAppearance | null | undefined;
+ 	readonly accentColor: number | null | undefined;
+ 	readonly timezone: string | null | undefined;
+ 	readonly timezonePrivacyFlags: number | undefined;
+@@ -213,6 +216,7 @@ export class User {
+ 		this.banner = hasKey(user, 'banner') ? (user.banner ?? null) : undefined;
+ 		this.bannerColor = hasKey(user, 'banner_color') ? (user.banner_color ?? null) : undefined;
+ 		this.pronouns = hasKey(user, 'pronouns') ? (user.pronouns ?? null) : undefined;
++		this.profileAppearance = hasKey(user, 'profile_appearance') ? ('profile_appearance' in user ? user.profile_appearance : null) : undefined;
+ 		this.accentColor = hasKey(user, 'accent_color') ? (user.accent_color ?? null) : undefined;
+ 		this.timezone = hasKey(user, 'timezone') ? (user.timezone ?? null) : undefined;
+ 		this.timezonePrivacyFlags = hasKey(user, 'timezone_privacy_flags')
+@@ -428,6 +432,8 @@ export class User {
+ 		if (bannerColor !== undefined) result.banner_color = bannerColor;
+ 		const pronouns = pickField(this.pronouns, u, 'pronouns', opts);
+ 		if (pronouns !== undefined) result.pronouns = pronouns;
++		const appearance = pickField(this.profileAppearance, u, 'profile_appearance', opts);
++		if (appearance !== undefined) result.profile_appearance = appearance;
+ 		const accentColor = pickField(this.accentColor, u, 'accent_color', opts);
+ 		if (accentColor !== undefined) result.accent_color = accentColor;
+ 		const timezone = pickField(this.timezone, u, 'timezone', opts);
+@@ -710,6 +716,7 @@ export class User {
+ 			this.banner === other.banner &&
+ 			this.bannerColor === other.bannerColor &&
+ 			this.pronouns === other.pronouns &&
++			JSON.stringify(this.profileAppearance) === JSON.stringify(other.profileAppearance) &&
+ 			this.accentColor === other.accentColor &&
+ 			this.timezone === other.timezone &&
+ 			this.timezonePrivacyFlags === other.timezonePrivacyFlags &&
+@@ -777,6 +784,7 @@ export class User {
+ 		setOptional('banner', this.banner);
+ 		setOptional('banner_color', this.bannerColor);
+ 		setOptional('pronouns', this.pronouns);
++		setOptional('profile_appearance', this.profileAppearance);
+ 		setOptional('accent_color', this.accentColor);
+ 		if (this.isStaff()) {
+ 			setOptional('timezone', this.timezone);
+diff --git a/packages/schema/src/domains/user/ProfileAppearanceSchema.ts b/packages/schema/src/domains/user/ProfileAppearanceSchema.ts
+new file mode 100644
+index 0000000..943c6b5
+--- /dev/null
++++ b/packages/schema/src/domains/user/ProfileAppearanceSchema.ts
+@@ -0,0 +1,16 @@
++// SPDX-License-Identifier: AGPL-3.0-or-later
++
++import {z} from 'zod';
++
++const ProfileColor = z.number().int().min(0).max(0xffffff);
++
++export const ProfileAppearanceSchema = z.strictObject({
++	theme: z.strictObject({primary: ProfileColor, accent: ProfileColor}).nullable(),
++	name_style: z.strictObject({
++		font: z.enum(['default', 'modern', 'serif', 'mono']),
++		effect: z.enum(['solid', 'gradient', 'neon', 'cartoon', 'pop', 'candy', 'prism']),
++		colors: z.array(ProfileColor).min(1).max(5),
++	}).nullable(),
++});
++
++export type ProfileAppearance = z.infer<typeof ProfileAppearanceSchema>;
+diff --git a/packages/schema/src/domains/user/UserRequestSchemas.ts b/packages/schema/src/domains/user/UserRequestSchemas.ts
+index 1178fd8..8774e43 100644
+--- a/packages/schema/src/domains/user/UserRequestSchemas.ts
++++ b/packages/schema/src/domains/user/UserRequestSchemas.ts
+@@ -66,6 +66,7 @@ import {
+ 	UsernameType,
+ } from '@fluxer/schema/src/primitives/UserValidators';
+ import {z} from 'zod';
++import {ProfileAppearanceSchema} from './ProfileAppearanceSchema';
+ 
+ export const UserUpdateRequest = z
+ 	.object({
+@@ -81,6 +82,7 @@ export const UserUpdateRequest = z
+ 			.nullish()
+ 			.describe('User biography text, up to the instance max_bio_length limit (320 by default)'),
+ 		pronouns: createStringType(1, 40).nullish().describe('User pronouns (max 40 characters)'),
++		profile_appearance: ProfileAppearanceSchema.nullish(),
+ 		accent_color: ColorType.nullish().describe('Profile accent color as integer'),
+ 		timezone: createStringType(1, 128).nullish().describe('IANA timezone identifier saved for profile local time'),
+ 		timezone_privacy_flags: createBitflagInt32Type(
+diff --git a/packages/schema/src/domains/user/UserResponseSchemas.ts b/packages/schema/src/domains/user/UserResponseSchemas.ts
+index 1e584cd..1a397a8 100644
+--- a/packages/schema/src/domains/user/UserResponseSchemas.ts
++++ b/packages/schema/src/domains/user/UserResponseSchemas.ts
+@@ -50,6 +50,7 @@ import {
+ 	UserPremiumTypesSchema,
+ } from '@fluxer/schema/src/primitives/UserSettingsValidators';
+ import {z} from 'zod';
++import {type ProfileAppearance, ProfileAppearanceSchema} from './ProfileAppearanceSchema';
+ 
+ export const UserPartialResponse = z.object({
+ 	id: SnowflakeStringType.describe('The unique identifier (snowflake) for this user'),
+@@ -87,6 +88,7 @@ export const UserPrivateResponse = UserPartialResponse.extend({
+ 	has_verified_phone: z.boolean().describe('Deprecated. Always false.'),
+ 	bio: z.string().nullable().describe('The user biography text'),
+ 	pronouns: z.string().nullable().describe('The preferred pronouns of the user'),
++	profile_appearance: ProfileAppearanceSchema.nullable().optional(),
+ 	accent_color: Int32Type.nullable().describe('The user-selected accent color as an integer'),
+ 	timezone: z.string().nullable().optional().describe('The IANA timezone identifier saved by the user'),
+ 	timezone_privacy_flags: createBitflagInt32Type(
+@@ -338,6 +340,7 @@ export const RecoveryKitCreateResponse = z.object({
+ export type RecoveryKitCreateResponse = z.infer<typeof RecoveryKitCreateResponse>;
+ 
+ export interface UserProfileResponse {
++	profile_appearance?: ProfileAppearance | null;
+ 	bio: string | null;
+ 	pronouns: string | null;
+ 	banner: string | null;
+@@ -662,6 +665,7 @@ const UserProfileDataResponse = z.object({
+ 	banner: z.string().nullable().describe('Hash of the profile banner image'),
+ 	banner_color: Int32Type.nullable().optional().describe('Default banner color if no custom banner'),
+ 	accent_color: Int32Type.nullable().describe('User-selected accent color'),
++	profile_appearance: ProfileAppearanceSchema.nullable().optional(),
+ });
+ 
+ const GuildMemberProfileDataResponse = z
