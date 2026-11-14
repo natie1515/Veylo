@@ -8,6 +8,31 @@ on:
         required: true
         default: veylo.sbs
 
+      privacy_url:
+        description: URL HTTPS de la política de privacidad
+        required: true
+        type: string
+      terms_url:
+        description: URL HTTPS de los términos de servicio
+        required: true
+        type: string
+      feedback_url:
+        description: URL HTTPS del formulario de comentarios
+        required: true
+        type: string
+      whats_new_url:
+        description: URL HTTPS de Novedades (opcional)
+        required: false
+        type: string
+      apk_url:
+        description: URL HTTPS de descarga para Android (opcional)
+        required: false
+        type: string
+      developer_docs_url:
+        description: URL HTTPS de la documentación (opcional)
+        required: false
+        type: string
+
 permissions:
   contents: read
 
@@ -87,8 +112,7 @@ jobs:
               ("productName: 'Fluxer',", "productName: 'Veylo',"),
               ("artifactProductName: 'Fluxer',", "artifactProductName: 'Veylo',"),
               ("appId: 'app.fluxer',", "appId: 'net.hidenplay.veylo',"),
-              ("target: winTargets,", """target: [{target: 'nsis', arch: ['x64']}],
-              sign: false,"""),
+              ("target: winTargets,", "target: [{target: 'nsis', arch: ['x64']}],"),
               ("\n\tlinux: {\n\t\ticon:", "\n\tnsis: {artifactName: 'Veylo-Setup.exe'},\n\tlinux: {\n\t\ticon:"),
           ])
           PY
@@ -168,6 +192,111 @@ jobs:
           ])
           PY
 
+      - name: Aplicar editor Premium de Veylo
+        run: |
+          patch=patches/veylo-perfil-pc.patch
+          if git apply --check "$patch"; then
+            git apply "$patch"
+          elif ! git apply --reverse --check "$patch"; then
+            echo "El parche de perfil no coincide con esta rama." >&2
+            exit 1
+          fi
+
+      - name: Configurar enlaces de Veylo
+        env:
+          PRIVACY_URL: ${{ inputs.privacy_url }}
+          TERMS_URL: ${{ inputs.terms_url }}
+          FEEDBACK_URL: ${{ inputs.feedback_url }}
+          WHATS_NEW_URL: ${{ inputs.whats_new_url }}
+          APK_URL: ${{ inputs.apk_url }}
+          DOCS_URL: ${{ inputs.developer_docs_url }}
+          DOMAIN: ${{ inputs.domain }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+          from urllib.parse import urlsplit
+
+          def url(key, default=""):
+              value = os.environ[key].strip() or default
+              parsed = urlsplit(value)
+              if (parsed.scheme != "https" or not parsed.hostname
+                      or parsed.username is not None
+                      or any(char.isspace() or ord(char) < 32 for char in value)):
+                  raise SystemExit(f"Escribe una URL pública HTTPS para {key}.")
+              return value
+
+          domain = os.environ["DOMAIN"].strip().lower()
+          routes = Path("fluxer_app/src/app/Routes.ts")
+          source = routes.read_text(encoding="utf-8")
+          destinations = {
+              "privacy": url("PRIVACY_URL"),
+              "terms": url("TERMS_URL"),
+              "feedback": url("FEEDBACK_URL"),
+              "patchNotes": url("WHATS_NEW_URL", "https://github.com/natie1515/Veylo/releases"),
+          }
+          for key, value in destinations.items():
+              source, count = re.subn(
+                  rf"(?m)^(\s*{key}: \(\): string \| null => )[^\n]+,$",
+                  lambda match: match[1] + json.dumps(value) + ",",
+                  source,
+              )
+              if count != 1:
+                  raise SystemExit(f"No se encontró la ruta {key} en {routes}.")
+          routes.write_text(source, encoding="utf-8")
+
+          docs = url("DOCS_URL", f"https://docs.{domain}/")
+          constants = Path("fluxer_app/src/features/app/config/I18nDisplayConstants.ts")
+          source = constants.read_text(encoding="utf-8")
+          for key, value in {"FLUXER_DOCS_DOMAIN": urlsplit(docs).hostname, "FLUXER_DOCS_URL": docs}.items():
+              source, count = re.subn(
+                  rf"(?m)^(export const {key} = )[^\n]+;$",
+                  lambda match: match[1] + json.dumps(value) + ";",
+                  source,
+              )
+              if count != 1:
+                  raise SystemExit(f"No se encontró {key} en {constants}.")
+          constants.write_text(source, encoding="utf-8")
+
+          banner = Path("fluxer_app/src/features/app/components/layout/app_layout/nagbars/AndroidAppNagbar.tsx")
+          source = banner.read_text(encoding="utf-8")
+          android_url = url("APK_URL", "https://github.com/natie1515/Suy/releases/latest")
+          edits = {
+              "import {GOOGLE_PLAY_NAME, GOOGLE_PLAY_URL} from '@app/features/app/config/I18nDisplayConstants';\n": "",
+              "import {msg} from '@lingui/core/macro';\n": "",
+              "openExternalUrl(GOOGLE_PLAY_URL);": f"openExternalUrl({json.dumps(android_url)});",
+              "const {i18n} = useLingui();": """const {i18n} = useLingui();
+          	const [message, button] = androidDownloadCopy(i18n.locale);""",
+              "i18n._(ANDROID_APP_MESSAGE_DESCRIPTOR, {googlePlay: GOOGLE_PLAY_NAME})": "message",
+              "i18n._(ANDROID_APP_BUTTON_DESCRIPTOR, {googlePlay: GOOGLE_PLAY_NAME})": "button",
+          }
+          for old, new in edits.items():
+              if source.count(old) != 1:
+                  raise SystemExit(f"No se encontró un ajuste único en {banner}: {old}")
+              source = source.replace(old, new, 1)
+          copy = """function androidDownloadCopy(locale: string): [string, string] {
+          	switch (locale.split(/[-_]/)[0]) {
+          		case 'es':
+          			return ['Descarga Veylo para Android y chatea desde tu móvil.', 'Descargar Veylo para Android'];
+          		case 'pt':
+          			return ['Baixe o Veylo para Android e converse pelo celular.', 'Baixar o Veylo para Android'];
+          		default:
+          			return ['Download Veylo for Android and chat from your phone.', 'Download Veylo for Android'];
+          	}
+          }
+
+          """
+          source, count = re.subn(
+              r"(?s)const ANDROID_APP_MESSAGE_DESCRIPTOR = .*?(?=export const AndroidAppNagbar)",
+              lambda _: copy, source,
+          )
+          if count != 1:
+              raise SystemExit(f"No se encontró el texto del banner en {banner}.")
+          banner.write_text(source, encoding="utf-8")
+          PY
+
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
 
@@ -221,9 +350,34 @@ jobs:
           Write-Host "Enlazador MSVC: $linker"
           pnpm run build
 
-      - name: Generar instalador Windows x64
+      - name: Firmar y generar instalador Windows x64
         working-directory: fluxer_desktop
-        run: pnpm exec electron-builder --config electron-builder.config.cjs --win nsis --x64 --publish never
+        env:
+          WIN_CSC_LINK: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "true"
+        run: |
+          if [[ -z "$WIN_CSC_LINK" || -z "$WIN_CSC_KEY_PASSWORD" ]]; then
+            echo "Configura WINDOWS_CERT_PFX_BASE64 y WINDOWS_CERT_PASSWORD en GitHub Actions." >&2
+            exit 1
+          fi
+          pnpm exec electron-builder --config electron-builder.config.cjs --win nsis --x64 --publish never
+
+      - name: Verificar firmas Authenticode
+        shell: pwsh
+        working-directory: fluxer_desktop
+        run: |
+          $files = @('dist-electron/Veylo-Setup.exe', 'dist-electron/win-unpacked/Veylo.exe')
+          foreach ($file in $files) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              throw "Falta el ejecutable esperado: $file"
+            }
+            $signature = Get-AuthenticodeSignature -LiteralPath $file
+            if ($signature.Status -ne 'Valid' -or -not $signature.TimeStamperCertificate) {
+              throw "Firma o sello de tiempo inválido en ${file}: $($signature.Status)"
+            }
+            Write-Host "Firma válida en ${file}: $($signature.SignerCertificate.Subject)"
+          }
 
       - name: Subir instalador
         uses: actions/upload-artifact@v4
