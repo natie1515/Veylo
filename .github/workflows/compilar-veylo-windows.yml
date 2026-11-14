@@ -88,7 +88,7 @@ jobs:
               ("artifactProductName: 'Fluxer',", "artifactProductName: 'Veylo',"),
               ("appId: 'app.fluxer',", "appId: 'net.hidenplay.veylo',"),
               ("target: winTargets,", """target: [{target: 'nsis', arch: ['x64']}],
-              signAndEditExecutable: false,"""),
+              sign: false,"""),
               ("\n\tlinux: {\n\t\ticon:", "\n\tnsis: {artifactName: 'Veylo-Setup.exe'},\n\tlinux: {\n\t\ticon:"),
           ])
           PY
