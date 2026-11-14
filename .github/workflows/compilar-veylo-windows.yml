@@ -35,6 +35,8 @@ on:
 
 permissions:
   contents: read
+  id-token: write
+  attestations: write
 
 jobs:
   build:
@@ -108,11 +110,13 @@ jobs:
               ("stable: 'Fluxer',", "stable: 'Veylo',"),
               ("stable: 'Fluxer.Fluxer',", "stable: 'Veylo.Veylo',"),
           ])
+          win_target = "target: [{target: 'nsis', arch: ['x64']}],"
+          win_target += "\n\t\tsign: false,\n\t\tverifyUpdateCodeSignature: false,"
           replace("fluxer_desktop/electron-builder.config.cjs", [
               ("productName: 'Fluxer',", "productName: 'Veylo',"),
               ("artifactProductName: 'Fluxer',", "artifactProductName: 'Veylo',"),
               ("appId: 'app.fluxer',", "appId: 'net.hidenplay.veylo',"),
-              ("target: winTargets,", "target: [{target: 'nsis', arch: ['x64']}],"),
+              ("target: winTargets,", win_target),
               ("\n\tlinux: {\n\t\ticon:", "\n\tnsis: {artifactName: 'Veylo-Setup.exe'},\n\tlinux: {\n\t\ticon:"),
           ])
           PY
@@ -350,34 +354,15 @@ jobs:
           Write-Host "Enlazador MSVC: $linker"
           pnpm run build
 
-      - name: Firmar y generar instalador Windows x64
+      - name: Generar instalador Windows x64
         working-directory: fluxer_desktop
-        env:
-          WIN_CSC_LINK: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
-          CSC_IDENTITY_AUTO_DISCOVERY: "true"
-        run: |
-          if [[ -z "$WIN_CSC_LINK" || -z "$WIN_CSC_KEY_PASSWORD" ]]; then
-            echo "Configura WINDOWS_CERT_PFX_BASE64 y WINDOWS_CERT_PASSWORD en GitHub Actions." >&2
-            exit 1
-          fi
-          pnpm exec electron-builder --config electron-builder.config.cjs --win nsis --x64 --publish never
+        run: pnpm exec electron-builder --config electron-builder.config.cjs --win nsis --x64 --publish never
 
-      - name: Verificar firmas Authenticode
-        shell: pwsh
-        working-directory: fluxer_desktop
-        run: |
-          $files = @('dist-electron/Veylo-Setup.exe', 'dist-electron/win-unpacked/Veylo.exe')
-          foreach ($file in $files) {
-            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
-              throw "Falta el ejecutable esperado: $file"
-            }
-            $signature = Get-AuthenticodeSignature -LiteralPath $file
-            if ($signature.Status -ne 'Valid' -or -not $signature.TimeStamperCertificate) {
-              throw "Firma o sello de tiempo inválido en ${file}: $($signature.Status)"
-            }
-            Write-Host "Firma válida en ${file}: $($signature.SignerCertificate.Subject)"
-          }
+      - name: Firmar la procedencia del instalador
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest@v4
+        with:
+          subject-path: fluxer_desktop/dist-electron/Veylo-Setup.exe
 
       - name: Subir instalador
         uses: actions/upload-artifact@v4
